@@ -145,6 +145,13 @@ defmodule OpenAPI.Processor.Naming do
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
+    all_names =
+      if infix = config[:operation_infix] do
+        Enum.map(all_names, &Module.concat([infix, &1]))
+      else
+        all_names
+      end
+
     if length(all_names) > 0 do
       all_names
     else
