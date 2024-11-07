@@ -22,6 +22,7 @@ defmodule OpenAPI.Processor do
   alias OpenAPI.Processor.Operation.Param
   alias OpenAPI.Processor.Schema
   alias OpenAPI.Processor.Schema.Field
+  alias OpenAPI.Processor.Schema.AdditinalFields
   alias OpenAPI.Processor.State
   alias OpenAPI.Processor.Type
   alias OpenAPI.Spec
@@ -424,7 +425,10 @@ defmodule OpenAPI.Processor do
         :else ->
           {state, fields} = process_schema_fields(state, schema_spec, ref, seen_refs)
 
-          schema = Schema.new(ref, schema_spec, fields)
+          {state, additional_properties} =
+            process_schema_additional_fields(state, schema_spec, ref, seen_refs)
+
+          schema = Schema.new(ref, schema_spec, fields, additional_properties)
           State.put_schema(state, ref, schema)
       end
     end
@@ -474,6 +478,25 @@ defmodule OpenAPI.Processor do
 
         {state, [field | fields]}
     end
+  end
+
+  defp process_schema_additional_fields(state, schema_spec, parent_ref, seen_refs) do
+    %SchemaSpec{additional_properties: additional_properties} = schema_spec
+    {state, type} = Type.from_schema(state, additional_properties)
+
+    state =
+      if is_reference(type) do
+        schema = Map.fetch!(state.schema_specs_by_ref, type)
+        process_schema(state, type, schema, {:additional_properties, parent_ref}, seen_refs)
+      else
+        state
+      end
+
+    additional_fields = %AdditinalFields{
+      type: type
+    }
+
+    {state, additional_fields}
   end
 
   @spec record_schema_output_format(State.t()) :: State.t()

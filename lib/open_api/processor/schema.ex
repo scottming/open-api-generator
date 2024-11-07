@@ -16,6 +16,7 @@ defmodule OpenAPI.Processor.Schema do
   need to modify this struct directly.
   """
   alias OpenAPI.Processor.Schema.Field
+  alias OpenAPI.Processor.Schema.AdditinalFields
   alias OpenAPI.Processor.Type
   alias OpenAPI.Spec.Schema, as: SchemaSpec
 
@@ -26,6 +27,7 @@ defmodule OpenAPI.Processor.Schema do
   @type t :: %__MODULE__{
           context: [tuple],
           fields: [Field.t()],
+          additional_fields: AdditinalFields.t(),
           module_name: module,
           output_format: format | nil,
           ref: reference,
@@ -34,6 +36,7 @@ defmodule OpenAPI.Processor.Schema do
 
   defstruct context: [],
             fields: [],
+            additional_fields: nil,
             module_name: nil,
             output_format: nil,
             ref: nil,
@@ -56,13 +59,14 @@ defmodule OpenAPI.Processor.Schema do
   end
 
   @doc false
-  @spec new(reference, SchemaSpec.t(), [Field.t()]) :: t
-  def new(ref, schema_spec, fields) do
+  @spec new(reference, SchemaSpec.t(), [Field.t()], AdditinalFields.t()) :: t
+  def new(ref, schema_spec, fields, additional_fields) do
     %SchemaSpec{"$oag_schema_context": context} = schema_spec
 
     %__MODULE__{
       context: context,
       fields: fields,
+      additional_fields: additional_fields,
       module_name: nil,
       output_format: nil,
       ref: ref,

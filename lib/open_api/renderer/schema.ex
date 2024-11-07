@@ -44,6 +44,7 @@ defmodule OpenAPI.Renderer.Schema do
   """
   alias OpenAPI.Processor.Schema
   alias OpenAPI.Processor.Schema.Field
+  alias OpenAPI.Processor.Schema.AdditinalFields
   alias OpenAPI.Renderer.File
   alias OpenAPI.Renderer.State
   alias OpenAPI.Renderer.Util
@@ -122,24 +123,46 @@ defmodule OpenAPI.Renderer.Schema do
   """
   @spec render_types(State.t(), [Schema.t()]) :: Macro.t()
   def render_types(state, schemas) do
-    for %Schema{fields: fields, output_format: format, type_name: type} <- schemas do
+    for %Schema{
+          fields: fields,
+          output_format: format,
+          type_name: type,
+          additional_fields: additional_fields
+        } <- schemas do
       fields = render_type_fields(state, fields)
+      format = if additional_fields_is_ref?(additional_fields), do: :dynamic_map, else: format
+      additional_fields = render_type_additional_fields(state, additional_fields)
 
-      if format == :struct do
-        quote do
-          @type unquote({type, [], nil}) :: %__MODULE__{
-                  unquote_splicing(fields)
-                }
+      rendered =
+        case format do
+          :dynamic_map ->
+            quote do
+              @type unquote({type, [], nil}) :: %{
+                      unquote(additional_fields)
+                    }
+            end
+
+          :struct ->
+            quote do
+              @type unquote({type, [], nil}) :: %__MODULE__{
+                      unquote_splicing(fields)
+                    }
+            end
+
+          _ ->
+            quote do
+              @type unquote({type, [], nil}) :: %{
+                      unquote_splicing(fields)
+                    }
+            end
         end
-      else
-        quote do
-          @type unquote({type, [], nil}) :: %{
-                  unquote_splicing(fields)
-                }
-        end
-      end
-      |> Util.put_newlines()
+
+      Util.put_newlines(rendered)
     end
+  end
+
+  defp additional_fields_is_ref?(%AdditinalFields{type: type}) do
+    is_reference(type)
   end
 
   @spec render_type_fields(State.t(), [Field.t()]) :: Macro.t()
@@ -157,6 +180,15 @@ defmodule OpenAPI.Renderer.Schema do
       quote do
         {unquote(String.to_atom(name)), unquote(rendered_type)}
       end
+    end
+  end
+
+  defp render_type_additional_fields(state, additional_fields) do
+    %AdditinalFields{type: type} = additional_fields
+    rendered_type = Util.to_type(state, type)
+
+    quote do
+      {any(), unquote(rendered_type)}
     end
   end
 
@@ -179,10 +211,12 @@ defmodule OpenAPI.Renderer.Schema do
       |> Enum.sort()
       |> Enum.dedup()
 
-    quote do
-      defstruct unquote(fields)
+    if not Enum.empty?(fields) do
+      quote do
+        defstruct unquote(fields)
+      end
+      |> Util.put_newlines()
     end
-    |> Util.put_newlines()
   end
 
   @spec extra_fields(State.t()) :: [Field.t()]
@@ -233,12 +267,24 @@ defmodule OpenAPI.Renderer.Schema do
 
   defp render_field_function_clause(state, schema) do
     %Schema{fields: fields, type_name: type} = schema
-    fields = render_field_function_clause_fields(state, fields)
+
+    fields =
+      if additional_fields_is_ref?(schema.additional_fields) do
+        render_field_function_clause_additinal_fields(state, schema.additional_fields)
+      else
+        render_field_function_clause_fields(state, fields)
+      end
 
     quote do
       def __fields__(unquote(type)) do
         unquote(fields)
       end
+    end
+  end
+
+  defp render_field_function_clause_additinal_fields(state, additional_fields) do
+    quote do
+      [__any: unquote(Util.to_readable_type(state, additional_fields.type))]
     end
   end
 
